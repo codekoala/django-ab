@@ -1,3 +1,5 @@
+import logging
+
 from ab.middleware import get_current_request
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -7,24 +9,28 @@ from django.template.loaders.filesystem import \
 from django.utils.importlib import import_module
 
 template_source_loaders = None
+log = logging.getLogger('ab.loaders')
 
-def load_template_source(template_name, template_dirs=None, 
+def load_template_source(template_name, template_dirs=None,
     template_loader=default_template_loader):
-    """If an Experiment exists for this template use template_loader to load it."""    
+    """If an Experiment exists for this template use template_loader to load it."""
     request = get_current_request()
     test_template_name = request.ab.run(template_name)
 
     global template_source_loaders
     if template_source_loaders is None:
+        log.debug('Populating template loaders')
         loaders = []
         for path in settings.TEMPLATE_LOADERS:
             i = path.rfind('.')
             module, attr = path[:i], path[i+1:]
             try:
+                log.debug('Loading from: %s' % module)
                 mod = import_module(module)
             except ImportError, e:
                 raise ImproperlyConfigured, 'Error importing template source loader %s: "%s"' % (module, e)
             try:
+                log.debug('Looking for loader: %s' % attr)
                 func = getattr(mod, attr)
             except AttributeError:
                 raise ImproperlyConfigured, 'Module "%s" does not define a "%s" callable template source loader' % (module, attr)
@@ -32,13 +38,19 @@ def load_template_source(template_name, template_dirs=None,
                 import warnings
                 warnings.warn("Your TEMPLATE_LOADERS setting includes %r, but your Python installation doesn't support that type of template loading. Consider removing that line from TEMPLATE_LOADERS." % path)
             else:
+                log.debug('Appending loader: %s' % path)
                 loaders.append(func)
+
         template_source_loaders = tuple(loaders)
+
     for template_loader in template_source_loaders:
         if template_loader != load_template_source:
             try:
+                log.debug('Loading "%s" from "%s" with %s' % (test_template_name, template_dirs, template_loader.__module__))
                 return template_loader(test_template_name, template_dirs=template_dirs)
             except TemplateDoesNotExist:
                 pass
+
     raise TemplateDoesNotExist
+
 load_template_source.is_usable = True

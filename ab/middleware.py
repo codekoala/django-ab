@@ -1,3 +1,5 @@
+import logging
+
 try:
     from threading import local
 except ImportError:
@@ -6,11 +8,11 @@ except ImportError:
 from ab.abs import AB
 from ab.models import Experiment
 
+log = logging.getLogger('ab.middleware')
 
 _thread_locals = local()
 def get_current_request():
     return getattr(_thread_locals, 'request', None)
-
 
 # @@@ This won't work with caching. Need to create an AB aware cache middleware.
 class ABMiddleware:
@@ -21,13 +23,17 @@ class ABMiddleware:
         reached it's goal.
         """
         _thread_locals.request = request
-        
+
         request.ab = AB(request)
         # request.ab.run()
         # If at least one Experiment is running then check if we're at a Goal
         # @@@ All this logic seems like it could be moved into the AB class. (but does it belong there?)
         if request.ab.is_active():
+            log.debug('An AB test is already active')
             exps = Experiment.objects.all()
             for exp in exps:
                 if request.ab.is_converted(exp):
+                    log.debug('User has been converted')
                     request.ab.convert(exp)
+
+        log.debug('User has not yet been converted')
