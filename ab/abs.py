@@ -82,9 +82,14 @@ class AB(object):
         """Update the test active on the request for this experiment."""
         key = self.get_experiment_key(exp)
         test_id = self.request.session[key]["id"]
-        test = Test.objects.get(pk=test_id)
-        test.conversions = test.conversions + 1
-        test.save()
+        try:
+            test = Test.objects.get(pk=test_id)
+        except Test.DoesNotExist:
+            # I don't care enough to cause an unhandled exception!
+            pass
+        else:
+            test.conversions = test.conversions + 1
+            test.save()
 
-        self.request.session[key]["converted"] = 1
-        self.request.session.modified = True
+            self.request.session[key]["converted"] = 1
+            self.request.session.modified = True
